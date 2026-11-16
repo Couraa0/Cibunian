@@ -11,14 +11,23 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Hello World greeting endpoint' })
+  @ApiOperation({ summary: 'Endpoint utama backend dengan status dan tautan dokumentasi' })
   @ApiResponse({
     status: 200,
-    description: 'Pesan salam berhasil diambil',
-    type: String,
+    description: 'Pesan selamat datang dan navigasi API dalam format JSON',
   })
-  getHello(): string {
-    return this.appService.getHello();
+  getRoot() {
+    return this.appService.getRoot();
+  }
+
+  @Get('api')
+  @ApiOperation({ summary: 'Informasi gateway API dan daftar rute endpoint yang tersedia' })
+  @ApiResponse({
+    status: 200,
+    description: 'Peta rute API dan tautan dokumentasi Swagger dalam format JSON',
+  })
+  getApiInfo() {
+    return this.appService.getApiInfo();
   }
 
   @Get('api/status')

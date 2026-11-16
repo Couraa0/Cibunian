@@ -26,9 +26,20 @@ export async function createNestServer(expressInstance: Express) {
 
   // Autentikasi memakai header Authorization (bukan cookie), jadi tanpa credentials.
   const origins = (process.env.CORS_ORIGIN ?? '*').split(',').map((o) => o.trim());
+  const isWildcard = origins.includes('*');
   app.enableCors({
-    origin: origins.includes('*') ? '*' : origins,
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    origin: isWildcard ? true : origins,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'Idempotency-Key',
+      'X-Device-Key',
+    ],
+    credentials: true,
   });
 
   const swaggerConfig = new DocumentBuilder()
@@ -41,8 +52,18 @@ export async function createNestServer(expressInstance: Express) {
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
-  SwaggerModule.setup('api/docs', app, document);
+  const swaggerCustomOptions = {
+    customSiteTitle: 'RUNA LOOP API Documentation',
+    customCssUrl:
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css',
+    customJs: [
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.js',
+    ],
+  };
+
+  SwaggerModule.setup('docs', app, document, swaggerCustomOptions);
+  SwaggerModule.setup('api/docs', app, document, swaggerCustomOptions);
 
   await app.init();
   return app;

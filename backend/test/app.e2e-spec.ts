@@ -20,7 +20,21 @@ describe('AppController (e2e)', () => {
     return request(app.getHttpServer())
       .get('/')
       .expect(200)
-      .expect('Hello World!');
+      .expect((res) => {
+        expect(res.body.status).toBe('online');
+        expect(res.body.message).toBeDefined();
+        expect(res.body.documentation).toBeDefined();
+      });
+  });
+
+  it('/api (GET)', () => {
+    return request(app.getHttpServer())
+      .get('/api')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.status).toBe('online');
+        expect(res.body.routes).toBeDefined();
+      });
   });
 
   it('/api/status (GET)', () => {

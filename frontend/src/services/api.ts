@@ -1,7 +1,8 @@
 import type { User } from '../types'
 import { cache, queue } from './offline'
 
-const BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace(/\/$/, '')
+const rawBase = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').trim()
+const BASE = rawBase.replace(/\/api\/?$/, '').replace(/\/+$/, '')
 
 export class ApiError extends Error {
   status: number
