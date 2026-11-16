@@ -31,7 +31,7 @@ export interface CollectionPoint extends Named {
 }
 
 export interface Category extends Named {
-  group: 'ANORGANIK' | 'ORGANIK' | 'RESIDU'
+  group: 'ANORGANIK' | 'ORGANIK' | 'RESIDU' | 'PRODUK'
   listed: boolean
   pricePerKg: Num | null
   stockKg?: Num

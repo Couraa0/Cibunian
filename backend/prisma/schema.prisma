@@ -21,6 +21,7 @@ enum WasteGroup {
   ANORGANIK
   ORGANIK
   RESIDU
+  PRODUK
 }
 
 enum CollectionType {

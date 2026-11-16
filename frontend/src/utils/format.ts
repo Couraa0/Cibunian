@@ -30,6 +30,7 @@ const LABELS: Record<string, string> = {
   ANORGANIK: 'Anorganik',
   ORGANIK: 'Organik',
   RESIDU: 'Residu',
+  PRODUK: 'Produk Olahan',
   POINT_COLLECTION: 'Di titik',
   HOME_PICKUP: 'Jemput',
   DROP_OFF: 'Setor',
