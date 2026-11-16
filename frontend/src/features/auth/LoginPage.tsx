@@ -5,18 +5,23 @@ import { BrandMark } from '../../components/ui'
 import { api } from '../../services/api'
 import type { User } from '../../types'
 
+// SEMENTARA: tombol masuk otomatis sebagai admin, hanya muncul bila VITE_AUTOFILL_ADMIN_PASSWORD
+// diisi saat build. Nilai VITE_ ikut ke berkas JavaScript publik, jadi siapa pun yang membuka situs
+// bisa masuk sebagai admin. Matikan dengan menghapus variabel itu di Vercel lalu redeploy.
+const AUTOFILL_PASSWORD = import.meta.env.VITE_AUTOFILL_ADMIN_PASSWORD as string | undefined
+const AUTOFILL_USERNAME = (import.meta.env.VITE_AUTOFILL_ADMIN_USERNAME as string | undefined) || 'admin'
+
 export function LoginPage({ onLogin, isOnline }: { onLogin: (user: User) => void; isOnline: boolean }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  async function login(name: string, secret: string) {
     setBusy(true)
     setError(null)
     try {
-      onLogin(await api.login(username, password))
+      onLogin(await api.login(name, secret))
     } catch (err) {
       setError(
         err instanceof TypeError
@@ -26,6 +31,18 @@ export function LoginPage({ onLogin, isOnline }: { onLogin: (user: User) => void
     } finally {
       setBusy(false)
     }
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    void login(username, password)
+  }
+
+  function loginAsAdmin() {
+    if (!AUTOFILL_PASSWORD) return
+    setUsername(AUTOFILL_USERNAME)
+    setPassword(AUTOFILL_PASSWORD)
+    void login(AUTOFILL_USERNAME, AUTOFILL_PASSWORD)
   }
 
   return (
@@ -91,6 +108,11 @@ export function LoginPage({ onLogin, isOnline }: { onLogin: (user: User) => void
         <button className="btn btn-success btn-lg w-100 mb-3" disabled={busy}>
           {busy ? 'Masuk…' : 'Masuk'}
         </button>
+        {AUTOFILL_PASSWORD && (
+          <button type="button" className="btn btn-outline-success w-100 mb-3" disabled={busy} onClick={loginAsAdmin}>
+            Masuk otomatis sebagai admin
+          </button>
+        )}
         <StatusBadge isOnline={isOnline} />
       </form>
     </div>
