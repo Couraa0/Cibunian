@@ -6,7 +6,7 @@ export class AppService {
     return {
       status: 'online',
       message: 'Selamat datang di REST API Bank Sampah RUNA (GEN APHYAH)',
-      service: 'RUNA Circular Integration Backend',
+      service: 'RUNA LOOP Backend',
       version: '1.0.0',
       environment: process.env.NODE_ENV ?? 'development',
       timestamp: new Date().toISOString(),
@@ -27,7 +27,7 @@ export class AppService {
   getApiInfo() {
     return {
       status: 'online',
-      message: 'RUNA Circular Integration API Gateway',
+      message: 'RUNA LOOP API Gateway',
       version: '1.0.0',
       timestamp: new Date().toISOString(),
       documentation: '/docs',

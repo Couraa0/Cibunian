@@ -14,6 +14,11 @@ try {
 let cachedServer: Express;
 
 export async function createNestServer(expressInstance: Express) {
+  // Di Vercel alamat pengunjung ada di X-Forwarded-For (ditulis ulang oleh Vercel, jadi bisa
+  // dipercaya). Tanpa ini semua pengunjung terlihat berasal dari satu IP dan pembatas login
+  // per IP tidak berarti. Di luar Vercel header itu bisa dipalsukan, jadi tidak dipercaya.
+  if (process.env.VERCEL === '1') expressInstance.set('trust proxy', true);
+
   const app = await NestFactory.create(
     AppModule,
     new ExpressAdapter(expressInstance),
@@ -38,7 +43,7 @@ export async function createNestServer(expressInstance: Express) {
   });
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('RUNA Circular Integration API')
+    .setTitle('RUNA LOOP API')
     .setDescription(
       'REST API Bank Sampah RUNA: pengumpulan, stok, pengangkutan, marketplace, pilot pengolahan, dan laporan.',
     )
@@ -48,7 +53,7 @@ export async function createNestServer(expressInstance: Express) {
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   const swaggerCustomOptions = {
-    customSiteTitle: 'RUNA Circular Integration API Documentation',
+    customSiteTitle: 'RUNA LOOP API Documentation',
     customCssUrl:
       'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css',
     customJs: [

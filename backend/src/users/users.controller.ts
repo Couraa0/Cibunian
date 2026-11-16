@@ -20,7 +20,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { MANAGERS, Roles } from '../auth/auth.guard.js';
-import { hashPassword } from '../auth/password.js';
+import { hashPassword, passwordChangedNow } from '../auth/password.js';
 import { Role } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma.service.js';
 
@@ -104,7 +104,11 @@ export class UsersController {
       where: { id },
       data: {
         ...data,
-        ...(password && { passwordHash: await hashPassword(password) }),
+        // Password direset admin: sesi lama akun itu ikut putus.
+        ...(password && {
+          passwordHash: await hashPassword(password),
+          passwordChangedAt: passwordChangedNow(),
+        }),
       },
       select: publicFields,
     });

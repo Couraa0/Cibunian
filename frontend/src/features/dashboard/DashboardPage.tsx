@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { TriangleAlert } from 'lucide-react'
+import { Boxes, ChartColumn, FlaskConical, House, Truck, TriangleAlert } from 'lucide-react'
 import { Card, StaleNote, Table } from '../../components/Resource'
+import { PageHeader, StatusPill } from '../../components/ui'
 import { useApi } from '../../hooks/useApi'
 import { useQueue } from '../../hooks/useQueue'
+import { queuePage } from '../../services/offline'
 import type { Dashboard } from '../../types'
 import { dateTime, kg, label, rupiah, toLocalInput } from '../../utils/format'
 
@@ -33,14 +35,17 @@ function Trend({ trend }: { trend: Dashboard['trend'] }) {
 /** Ke mana material yang terkumpul pergi: tersalurkan, diolah, atau masih di stok. */
 function MaterialFlow({ data }: { data: Dashboard }) {
   const collected = Number(data.collected.totalKg)
+  // Dihitung server dari ledger stok, tanpa produk olahan. Data lama di cache perangkat belum
+  // punya `flow`: pakai hitungan lama supaya layar offline tidak kosong.
+  const flow = data.flow ?? {
+    soldKg: data.sold.totalKg,
+    processedKg: data.plastic.processedKg,
+    stockKg: data.stock.reduce((total, c) => total + Number(c.stockKg ?? 0), 0),
+  }
   const parts = [
-    { name: 'Tersalurkan', value: Number(data.sold.totalKg), color: 'var(--kunyit)' },
-    { name: 'Diolah', value: Number(data.plastic.processedKg), color: '#7cc4dc' },
-    {
-      name: 'Masih di stok',
-      value: data.stock.reduce((total, c) => total + Number(c.stockKg ?? 0), 0),
-      color: '#8fd19a',
-    },
+    { name: 'Tersalurkan', value: Number(flow.soldKg), color: 'var(--kunyit)' },
+    { name: 'Diolah', value: Number(flow.processedKg), color: '#7cc4dc' },
+    { name: 'Masih di stok', value: Number(flow.stockKg), color: '#8fd19a' },
   ]
   const total = Math.max(collected, parts.reduce((sum, p) => sum + p.value, 0))
 
@@ -93,8 +98,8 @@ export function DashboardPage() {
 
   const notices = [
     queued.length > 0 && {
-      to: '/pengumpulan',
-      text: `${queued.length} transaksi di perangkat ini belum tersinkron`,
+      to: queuePage(queued[0]),
+      text: `${queued.length} catatan di perangkat ini belum tersinkron`,
     },
     data.pending.weighings > 0 && {
       to: '/pengumpulan',
@@ -111,11 +116,10 @@ export function DashboardPage() {
 
   return (
     <>
-      <h1 className="mb-0">Beranda</h1>
-      <p className="text-secondary">{today}</p>
+      <PageHeader icon={House} title="Beranda" lead={today}>
+        <MaterialFlow data={data} />
+      </PageHeader>
       <StaleNote at={cachedAt} />
-
-      <MaterialFlow data={data} />
 
       {notices.length > 0 && (
         <ul className="tindak mb-3" aria-label="Perlu ditindaklanjuti">
@@ -145,12 +149,12 @@ export function DashboardPage() {
 
       <div className="row g-3">
         <div className="col-12 col-xl-7">
-          <Card title="Pengumpulan 14 hari terakhir">
+          <Card title="Pengumpulan 14 hari terakhir" icon={ChartColumn}>
             <Trend trend={data.trend} />
           </Card>
         </div>
         <div className="col-12 col-xl-5">
-          <Card title="Stok material">
+          <Card title="Stok material dan produk" icon={Boxes}>
             <ul className="batang-list">
               {data.stock.map((c) => (
                 <li key={c.id}>
@@ -168,7 +172,7 @@ export function DashboardPage() {
           </Card>
         </div>
         <div className="col-12 col-xl-7">
-          <Card title="Pengangkutan berikutnya">
+          <Card title="Pengangkutan berikutnya" icon={Truck}>
             <Table
               rows={data.upcomingPickups}
               empty="Tidak ada pengangkutan terjadwal."
@@ -176,16 +180,22 @@ export function DashboardPage() {
                 { label: 'Jadwal', render: (p) => dateTime(p.scheduledAt) },
                 { label: 'Titik', render: (p) => p.collectionPoint.name },
                 { label: 'Petugas', render: (p) => p.assignedTo?.name ?? '-' },
-                { label: 'Status', render: (p) => label(p.status) },
+                { label: 'Status', render: (p) => <StatusPill status={p.status} /> },
               ]}
             />
           </Card>
         </div>
         <div className="col-12 col-xl-5">
-          <Card title="Pilot pengolahan">
+          <Card title="Pengolahan" icon={FlaskConical}>
             <dl className="rincian-data">
-              <dt>Organik diproses (BSF)</dt>
+              <dt>Organik diolah (kompos dan BSF)</dt>
               <dd>{kg(data.organic.feedingKg)}</dd>
+              {data.organic.compostKg != null && (
+                <>
+                  <dt>Kompos dihasilkan</dt>
+                  <dd>{kg(data.organic.compostKg)}</dd>
+                </>
+              )}
               <dt>Panen larva</dt>
               <dd>{kg(data.organic.harvestKg)}</dd>
               <dt>Residu / frass</dt>

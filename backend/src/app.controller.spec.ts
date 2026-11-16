@@ -15,8 +15,10 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('melaporkan status online dan tautan dokumentasi', () => {
+      const root = appController.getRoot();
+      expect(root.status).toBe('online');
+      expect(root.documentation.swaggerUi).toBe('/docs');
     });
   });
 });

@@ -10,6 +10,7 @@ interface Withdrawal {
   note?: string;
   saleId?: string;
   plasticExperimentId?: string;
+  organicRecordId?: string;
 }
 
 /**

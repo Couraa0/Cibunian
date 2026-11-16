@@ -31,9 +31,13 @@ export interface CollectionPoint extends Named {
 }
 
 export interface Category extends Named {
+  /** PRODUK = hasil olahan (maggot, kasgot): stoknya dari catatan panen, bukan pengumpulan. */
   group: 'ANORGANIK' | 'ORGANIK' | 'RESIDU' | 'PRODUK'
   listed: boolean
+  /** Harga jual ke pembeli. */
   pricePerKg: Num | null
+  /** Harga beli dari nasabah: setoran ber-KK menambah tabungan sebesar berat x harga ini. */
+  householdPricePerKg?: Num | null
   stockKg?: Num
 }
 
@@ -111,11 +115,15 @@ export interface OrganicRecord {
   weightKg: Num | null
   note: string | null
   recordedAt: string
+  /** Kategori stok yang ikut berubah: pakan keluar dari sini, hasil panen masuk ke sini. */
+  wasteCategory?: { name: string } | null
 }
 
 export interface OrganicBatch {
   id: string
   code: string
+  /** BSF = larva maggot, KOMPOS = pengomposan. */
+  method: 'BSF' | 'KOMPOS'
   startedAt: string
   status: 'ACTIVE' | 'CLOSED'
   notes: string | null
@@ -145,11 +153,66 @@ export interface Report {
   }
   moved: { totalKg: Num; count: number }
   sold: { totalKg: Num; totalAmount: Num; count: number }
-  organic: { feedingKg: Num; harvestKg: Num; frassKg: Num }
+  /** feedingFromStockKg = pakan dari stok organik RUNA; selisihnya dari mitra (restoran, hotel). */
+  organic: { feedingKg: Num; feedingFromStockKg?: Num; harvestKg: Num; frassKg: Num; compostKg?: Num }
   plastic: { processedKg: Num; experiments: number; prototypes: number }
+  /** Partisipasi nasabah: KK aktif terdaftar, KK yang setor, dan rincian per KK. */
+  participation?: {
+    registered: number
+    depositing: number
+    byHousehold: {
+      id: string
+      name: string
+      rt: string | null
+      rw: string | null
+      count: number
+      weightKg: Num
+      creditAmount: Num
+    }[]
+  }
+  /** Total periode sebelumnya dengan panjang sama; null bila rentang tanggal tidak lengkap. */
+  previous?: { collectedKg: Num; soldKg: Num; soldAmount: Num; depositingHouseholds?: number } | null
+}
+
+/** Saldo tabungan satu KK (GET /savings). */
+export interface SavingsAccount {
+  id: string
+  name: string
+  rt: string | null
+  rw: string | null
+  active: boolean
+  creditedAmount: Num
+  withdrawnAmount: Num
+  balance: Num
+  lastDepositAt: string | null
+}
+
+/** Riwayat tabungan satu KK (GET /savings/:householdId). */
+export interface SavingsHistory {
+  household: { id: string; name: string; rt: string | null; rw: string | null; active: boolean }
+  balance: Num
+  deposits: {
+    id: string
+    recordedAt: string
+    weightKg: Num
+    creditAmount: Num | null
+    wasteCategory: { name: string; group: Category['group'] }
+  }[]
+  withdrawals: { id: string; amount: Num; note: string | null; createdAt: string; recordedBy: { name: string } }[]
+}
+
+/** Tren enam bulan terakhir; semua deret sejajar dengan `months` ('YYYY-MM', terlama dulu). */
+export interface Analytics {
+  months: string[]
+  collectedKg: number[]
+  byPoint: { id: string; name: string; monthlyKg: number[] }[]
+  byCategory: { id: string; name: string; group: Category['group']; monthlyKg: number[] }[]
+  sales: { weightKg: number; amount: number }[]
 }
 
 export interface Dashboard extends Report {
+  /** Ke mana material terkumpul pergi, tanpa stok produk olahan. */
+  flow?: { soldKg: Num; processedKg: Num; stockKg: Num }
   stock: Category[]
   upcomingPickups: Pickup[]
   pending: { weighings: number; requests: number }

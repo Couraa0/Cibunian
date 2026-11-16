@@ -1,8 +1,10 @@
 import { Resource } from '../../components/Resource'
+import { Database } from 'lucide-react'
 import type { Field } from '../../components/Resource'
 import { useOptions } from '../../hooks/useApi'
 import type { Category, CollectionPoint, Household, User } from '../../types'
 import { label, options, rupiah } from '../../utils/format'
+import { PageHeader } from '../../components/ui'
 
 const active: Field = { name: 'active', label: 'Aktif', type: 'checkbox' }
 const yesNo = (value: unknown) => (value ? 'Ya' : 'Tidak')
@@ -26,9 +28,18 @@ const categoryFields: Field[] = [
     type: 'select',
     required: true,
     default: 'ANORGANIK',
-    options: options('ANORGANIK', 'ORGANIK', 'RESIDU'),
+    options: options('ANORGANIK', 'ORGANIK', 'RESIDU', 'PRODUK'),
+    help: 'Produk olahan = hasil pengolahan (maggot, kasgot, kompos); stoknya diisi dari catatan panen.',
   },
-  { name: 'pricePerKg', label: 'Harga per kg (Rp)', type: 'number', step: '1', min: '0' },
+  { name: 'pricePerKg', label: 'Harga jual per kg (Rp)', type: 'number', step: '1', min: '0' },
+  {
+    name: 'householdPricePerKg',
+    label: 'Harga beli dari nasabah per kg (Rp)',
+    type: 'number',
+    step: '1',
+    min: '0',
+    help: 'Setoran atas nama KK menambah tabungannya sebesar berat x harga ini. Kosongkan bila tidak dibayar.',
+  },
   { name: 'listed', label: 'Tampil di katalog marketplace', type: 'checkbox' },
 ]
 
@@ -40,7 +51,11 @@ export function MasterPage({ user }: { user: User }) {
 
   return (
     <>
-      <h1 className="mb-3">Data Master</h1>
+      <PageHeader
+        icon={Database}
+        title="Data Master"
+        lead="Nasabah, titik pengumpulan, kategori sampah, pembeli, dan akun pengguna."
+      />
 
       <Resource<Household>
         title="Rumah tangga / nasabah"
@@ -72,7 +87,7 @@ export function MasterPage({ user }: { user: User }) {
       />
 
       <Resource<Category>
-        title="Kategori sampah"
+        title="Kategori sampah dan produk olahan"
         path="/categories"
         addLabel="Tambah kategori"
         fields={canManage ? categoryFields : undefined}
@@ -80,7 +95,8 @@ export function MasterPage({ user }: { user: User }) {
         columns={[
           { label: 'Nama', render: (c) => c.name },
           { label: 'Kelompok', render: (c) => label(c.group) },
-          { label: 'Harga/kg', align: 'end', render: (c) => rupiah(c.pricePerKg) },
+          { label: 'Harga jual/kg', align: 'end', render: (c) => rupiah(c.pricePerKg) },
+          { label: 'Harga beli/kg', align: 'end', render: (c) => rupiah(c.householdPricePerKg) },
           { label: 'Di katalog', render: (c) => yesNo(c.listed) },
           { label: 'Aktif', render: (c) => yesNo(c.active) },
         ]}

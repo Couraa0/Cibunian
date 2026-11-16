@@ -1,4 +1,4 @@
-// Data awal: akun admin, empat titik pengumpulan, dan kategori sampah.
+// Data awal: akun admin, empat titik pengumpulan, kategori sampah, dan produk olahan.
 // Aman dijalankan berulang (upsert). Jalankan: npm run seed
 import { hashPassword } from './auth/password.js';
 import { Role, WasteGroup } from './generated/prisma/client.js';
@@ -45,6 +45,11 @@ const categories: [string, WasteGroup, boolean][] = [
   ['Logam', WasteGroup.ANORGANIK, true],
   ['Organik', WasteGroup.ORGANIK, false],
   ['Residu', WasteGroup.RESIDU, false],
+  // Hasil olahan BSF: stoknya bertambah dari catatan panen, lalu bisa dijual di marketplace.
+  ['Maggot BSF', WasteGroup.PRODUK, true],
+  ['Kasgot (pupuk organik)', WasteGroup.PRODUK, true],
+  // Hasil pengolahan organik metode kompos (bagian Sasa).
+  ['Kompos', WasteGroup.PRODUK, true],
 ];
 for (const [name, group, listed] of categories) {
   await prisma.wasteCategory.upsert({
@@ -55,4 +60,6 @@ for (const [name, group, listed] of categories) {
 }
 
 await prisma.$disconnect();
-console.log('Seed selesai: akun "admin", 4 titik pengumpulan, 6 kategori.');
+console.log(
+  `Seed selesai: akun "admin", 4 titik pengumpulan, ${categories.length} kategori.`,
+);

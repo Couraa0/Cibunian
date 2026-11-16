@@ -1,6 +1,6 @@
 # 🚀 Panduan Deploy Frontend & Backend ke Vercel Secara Terpisah
 
-Dokumen ini memandu langkah demi langkah proses deploy proyek **RUNA Circular Integration** ke **Vercel** sebagai dua project terpisah: satu untuk **Backend (NestJS API)** dan satu untuk **Frontend (Vite React PWA)**.
+Dokumen ini memandu langkah demi langkah proses deploy proyek **RUNA LOOP** ke **Vercel** sebagai dua project terpisah: satu untuk **Backend (NestJS API)** dan satu untuk **Frontend (Vite React PWA)**.
 
 ---
 
@@ -42,7 +42,7 @@ Karena Vercel Serverless Function tidak menyimpan state dan bersifat dinamis, ba
    # Di Windows PowerShell:
    $env:DATABASE_URL="postgresql://postgres.<project-ref>:<password>@<region>.pooler.supabase.com:5432/postgres?sslmode=require"
    $env:JWT_SECRET="kunci_rahasia_acak_minimal_32_karakter"
-   $env:SEED_ADMIN_PASSWORD="AdminPassword123!"
+   $env:SEED_ADMIN_PASSWORD="<password-admin-yang-kuat>"
 
    # Jalankan migrasi Prisma dan seed
    npx prisma migrate deploy

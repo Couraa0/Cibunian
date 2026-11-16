@@ -20,7 +20,7 @@ import {
 } from 'class-validator';
 import { CurrentUser } from '../auth/auth.guard.js';
 import type { AuthUser } from '../auth/auth.guard.js';
-import { dateRange, DateRangeDto } from '../common/date-range.dto.js';
+import { dateRange, ListQueryDto } from '../common/date-range.dto.js';
 import { CollectionType } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma.service.js';
 import { CollectionsService } from './collections.service.js';
@@ -55,7 +55,7 @@ class CreateCollectionDto {
   weighingRecordId?: string;
 }
 
-class QueryCollectionsDto extends DateRangeDto {
+class QueryCollectionsDto extends ListQueryDto {
   @IsOptional()
   @IsUUID()
   collectionPointId?: string;
@@ -78,7 +78,9 @@ export class CollectionsController {
         recordedAt: dateRange(query),
       },
       orderBy: { recordedAt: 'desc' },
-      take: 200, // ponytail: 200 terbaru tanpa pagination; tambah cursor bila riwayat perlu ditelusuri jauh
+      // ponytail: N terbaru tanpa pagination (bawaan 200, ekspor sampai 5000); tambah cursor
+      // bila riwayat perlu ditelusuri lebih jauh dari itu.
+      take: query.limit ?? 200,
       include: {
         collectionPoint: { select: { name: true } },
         wasteCategory: { select: { name: true } },

@@ -6,6 +6,7 @@ import {
   APP_PIPE,
 } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
+import type { JwtSignOptions } from '@nestjs/jwt';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthController } from './auth/auth.controller.js';
@@ -30,6 +31,7 @@ import {
   ReportsController,
   ReportsService,
 } from './reports/reports.controller.js';
+import { SavingsController } from './savings/savings.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { WeighingController } from './weighing/weighing.controller.js';
 
@@ -42,9 +44,13 @@ import { WeighingController } from './weighing/weighing.controller.js';
       useFactory: () => {
         const secret = process.env.JWT_SECRET;
         if (!secret) throw new Error('JWT_SECRET belum diatur');
-        // ponytail: token 7 hari tanpa refresh token, agar petugas yang lama
-        // offline tetap bisa sinkron. Tambah refresh token bila perlu sesi pendek.
-        return { secret, signOptions: { expiresIn: '7d' } };
+        // ponytail: tanpa refresh token. Bawaan 7 hari agar petugas yang lama offline tetap
+        // bisa sinkron; atur JWT_EXPIRES_IN (mis. "3d", "12h") untuk sesi lebih pendek.
+        // Sesi lama bisa diputus kapan saja dengan mengganti password (lihat AuthGuard).
+        const expiresIn = (process.env.JWT_EXPIRES_IN ?? '7d') as NonNullable<
+          JwtSignOptions['expiresIn']
+        >;
+        return { secret, signOptions: { expiresIn } };
       },
     }),
   ],
@@ -58,6 +64,7 @@ import { WeighingController } from './weighing/weighing.controller.js';
     BuyersController,
     CollectionsController,
     WeighingController,
+    SavingsController,
     InventoryController,
     PickupsController,
     MarketplaceController,

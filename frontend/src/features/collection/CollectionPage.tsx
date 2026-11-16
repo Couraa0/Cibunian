@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { Scale } from 'lucide-react'
 import type { FormEvent, ReactNode } from 'react'
+import { PendingCard } from '../../components/Pending'
 import { Card, StaleNote, Table } from '../../components/Resource'
 import { useApi, useOptions } from '../../hooks/useApi'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
-import { useQueue } from '../../hooks/useQueue'
+import { useOnSynced, useQueue } from '../../hooks/useQueue'
 import { api, syncQueue } from '../../services/api'
 import { queue } from '../../services/offline'
 import type { Category, Collection, Weighing } from '../../types'
-import { dateTime, kg, label, options, toLocalInput } from '../../utils/format'
+import { dateTime, kg, label, options, rupiah, toLocalInput } from '../../utils/format'
+import { PageHeader } from '../../components/ui'
 
 const POINT_KEY = 'runa.point'
 
@@ -53,9 +56,12 @@ function Choice({
 
 export function CollectionPage() {
   const isOnline = useNetworkStatus()
-  const queued = useQueue()
+  const queued = useQueue().filter((q) => q.path === '/collections')
   const points = useOptions('/collection-points')
-  const categories = (useApi<Category[]>('/categories').data ?? []).filter((c) => c.active !== false)
+  // Produk olahan (maggot, kasgot) bukan sampah yang dikumpulkan.
+  const categories = (useApi<Category[]>('/categories').data ?? []).filter(
+    (c) => c.active !== false && c.group !== 'PRODUK',
+  )
   const households = useOptions('/households')
   const weighings = useApi<Weighing[]>('/weighing')
   const history = useApi<Collection[]>('/collections')
@@ -70,17 +76,21 @@ export function CollectionPage() {
   const [recordedAt, setRecordedAt] = useState(() => toLocalInput())
   const [saved, setSaved] = useState<string | null>(null)
 
-  // Antrean berkurang = ada yang baru tersinkron: muat ulang riwayat dari server.
+  // Ada yang baru tersinkron: muat ulang riwayat dan daftar timbangan dari server.
   const reloadHistory = history.reload
   const reloadWeighings = weighings.reload
-  const previousQueued = useRef(queued.length)
-  useEffect(() => {
-    if (queued.length < previousQueued.current) {
+  useOnSynced(
+    queued.length,
+    useCallback(() => {
       reloadHistory()
       reloadWeighings()
-    }
-    previousQueued.current = queued.length
-  }, [queued.length, reloadHistory, reloadWeighings])
+    }, [reloadHistory, reloadWeighings]),
+  )
+
+  // Perkiraan tambahan tabungan KK: berat x harga beli kategori (dihitung ulang di server saat tersinkron).
+  const buyPrice = categories.find((c) => c.id === categoryId)?.householdPricePerKg
+  const currentKg = Number(weighing ? weighing.weightKg : weight)
+  const credit = householdId && buyPrice != null && currentKg > 0 ? Number(buyPrice) * currentKg : null
 
   const pointName = (id: unknown) => points.find((p) => p.value === id)?.label ?? '-'
   const categoryName = (id: unknown) => categories.find((c) => c.id === id)?.name ?? '-'
@@ -99,7 +109,10 @@ export function CollectionPage() {
       recordedAt: new Date(recordedAt).toISOString(),
       ...(weighing && { weighingRecordId: weighing.id }),
     })
-    setSaved(`${kg(weightKg)} ${categoryName(categoryId)} di ${pointName(pointId)}`)
+    setSaved(
+      `${kg(weightKg)} ${categoryName(categoryId)} di ${pointName(pointId)}` +
+        (credit != null ? `, tabungan KK bertambah sekitar ${rupiah(credit)}` : ''),
+    )
     setWeight('')
     setWeighing(null)
     setRecordedAt(toLocalInput())
@@ -114,7 +127,11 @@ export function CollectionPage() {
 
   return (
     <>
-      <h1 className="mb-3">Catat pengumpulan</h1>
+      <PageHeader
+        icon={Scale}
+        title="Catat pengumpulan"
+        lead="Timbang, pilih titik dan kategori, lalu simpan. Catatan tetap tersimpan di perangkat bila sinyal hilang."
+      />
 
       <form className="panel d-grid gap-3" onSubmit={submit}>
         <div className="timbangan">
@@ -169,7 +186,7 @@ export function CollectionPage() {
         />
 
         <details className="rincian">
-          <summary>Rincian lain: rumah tangga, cara, dan waktu</summary>
+          <summary>Rincian lain: nasabah (KK), cara, dan waktu</summary>
           <div className="row g-2 pt-2">
             <div className="col-12 col-md-4">
               <label className="form-label mb-1 small fw-semibold" htmlFor="household">
@@ -183,6 +200,7 @@ export function CollectionPage() {
                   </option>
                 ))}
               </select>
+              {credit != null && <div className="form-text">Tabungan KK bertambah sekitar {rupiah(credit)}.</div>}
             </div>
             <div className="col-12 col-md-4">
               <label className="form-label mb-1 small fw-semibold" htmlFor="type">
@@ -247,56 +265,14 @@ export function CollectionPage() {
         </Card>
       )}
 
-      {queued.length > 0 && (
-        <Card
-          title={`Belum tersinkron (${queued.length})`}
-          actions={
-            <button className="btn btn-sm btn-outline-success" onClick={() => void syncQueue()}>
-              Sinkronkan sekarang
-            </button>
-          }
-        >
-          <Table
-            rows={queued}
-            columns={[
-              { label: 'Dicatat', render: (q) => dateTime(q.createdAt) },
-              { label: 'Titik', render: (q) => pointName(q.body.collectionPointId) },
-              { label: 'Kategori', render: (q) => categoryName(q.body.wasteCategoryId) },
-              { label: 'Berat', align: 'end', render: (q) => kg(q.body.weightKg as number) },
-              {
-                label: 'Status',
-                render: (q) =>
-                  q.error ? (
-                    <span className="text-danger">Ditolak: {q.error}</span>
-                  ) : (
-                    <span className="text-secondary">Menunggu koneksi</span>
-                  ),
-              },
-              {
-                label: '',
-                align: 'end',
-                render: (q) =>
-                  q.error && (
-                    <span className="d-inline-flex gap-1">
-                      <button
-                        className="btn btn-sm btn-outline-success"
-                        onClick={() => void queue.put({ ...q, error: undefined }).then(syncQueue)}
-                      >
-                        Coba lagi
-                      </button>
-                      <button
-                        className="btn btn-sm btn-outline-danger"
-                        onClick={() => confirm('Hapus transaksi ini dari perangkat?') && void queue.remove(q.id)}
-                      >
-                        Hapus
-                      </button>
-                    </span>
-                  ),
-              },
-            ]}
-          />
-        </Card>
-      )}
+      <PendingCard
+        items={queued}
+        columns={[
+          { label: 'Titik', render: (q) => pointName(q.body.collectionPointId) },
+          { label: 'Kategori', render: (q) => categoryName(q.body.wasteCategoryId) },
+          { label: 'Berat', align: 'end', render: (q) => kg(q.body.weightKg as number) },
+        ]}
+      />
 
       <Card title="Riwayat pengumpulan">
         <StaleNote at={history.cachedAt} error={history.error} />

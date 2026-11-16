@@ -1,4 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
+import { idempotent } from '../common/idempotency.js';
 import {
   CollectionType,
   MovementType,
@@ -26,75 +27,77 @@ export class CollectionsService {
    * Idempotent: kunci yang sama (kirim ulang dari antrean offline) mengembalikan
    * transaksi yang sudah ada, tidak membuat yang baru.
    */
-  async create(input: NewCollection, userId: string, clientMutationId: string) {
-    const find = () =>
-      this.prisma.collectionTransaction.findUnique({
-        where: { clientMutationId },
-      });
-
-    const existing = await find();
-    if (existing) return existing;
-
+  create(input: NewCollection, userId: string, clientMutationId: string) {
     const { weighingRecordId, ...data } = input;
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        let weightKg: number | Prisma.Decimal = data.weightKg;
+    return idempotent(
+      () =>
+        this.prisma.collectionTransaction.findUnique({
+          where: { clientMutationId },
+        }),
+      () =>
+        this.prisma.$transaction(async (tx) => {
+          let weightKg: number | Prisma.Decimal = data.weightKg;
 
-        if (weighingRecordId) {
-          // Berat dari timbangan IoT adalah yang resmi, bukan angka kiriman klien.
-          const weighing = await tx.weighingRecord.findUnique({
-            where: { id: weighingRecordId },
-          });
-          if (weighing?.status !== WeighingStatus.PENDING) {
-            throw new ConflictException(
-              'Data timbangan tidak ditemukan atau sudah dipakai',
-            );
+          if (weighingRecordId) {
+            // Berat dari timbangan IoT adalah yang resmi, bukan angka kiriman klien.
+            const weighing = await tx.weighingRecord.findUnique({
+              where: { id: weighingRecordId },
+            });
+            if (weighing?.status !== WeighingStatus.PENDING) {
+              throw new ConflictException(
+                'Data timbangan tidak ditemukan atau sudah dipakai',
+              );
+            }
+            weightKg = weighing.weightKg;
           }
-          weightKg = weighing.weightKg;
-        }
 
-        const created = await tx.collectionTransaction.create({
-          data: {
-            ...data,
-            weightKg,
-            recordedById: userId,
-            clientMutationId,
-            movement: {
-              create: {
-                wasteCategoryId: data.wasteCategoryId,
-                type: MovementType.COLLECTION,
-                quantityKg: weightKg,
-                recordedById: userId,
+          // Insentif nasabah: setoran ber-KK menambah tabungan sebesar berat x harga beli kategori.
+          // ponytail: setoran dari antrean offline memakai harga saat tersinkron, bukan saat
+          // ditimbang; simpan harga di antrean bila harga ternyata sering berubah.
+          let creditAmount: Prisma.Decimal | undefined;
+          if (data.householdId) {
+            const category = await tx.wasteCategory.findUnique({
+              where: { id: data.wasteCategoryId },
+              select: { householdPricePerKg: true },
+            });
+            creditAmount = category?.householdPricePerKg
+              ?.mul(weightKg)
+              .toDecimalPlaces(2);
+          }
+
+          const created = await tx.collectionTransaction.create({
+            data: {
+              ...data,
+              weightKg,
+              creditAmount,
+              recordedById: userId,
+              clientMutationId,
+              movement: {
+                create: {
+                  wasteCategoryId: data.wasteCategoryId,
+                  type: MovementType.COLLECTION,
+                  quantityKg: weightKg,
+                  recordedById: userId,
+                },
               },
             },
-          },
-        });
-
-        if (weighingRecordId) {
-          // where status PENDING: bila dua petugas memakai timbangan yang sama, hanya satu yang lolos.
-          const { count } = await tx.weighingRecord.updateMany({
-            where: { id: weighingRecordId, status: WeighingStatus.PENDING },
-            data: {
-              status: WeighingStatus.USED,
-              collectionTransactionId: created.id,
-            },
           });
-          if (!count) {
-            throw new ConflictException('Data timbangan sudah dipakai');
+
+          if (weighingRecordId) {
+            // where status PENDING: bila dua petugas memakai timbangan yang sama, hanya satu yang lolos.
+            const { count } = await tx.weighingRecord.updateMany({
+              where: { id: weighingRecordId, status: WeighingStatus.PENDING },
+              data: {
+                status: WeighingStatus.USED,
+                collectionTransactionId: created.id,
+              },
+            });
+            if (!count) {
+              throw new ConflictException('Data timbangan sudah dipakai');
+            }
           }
-        }
-        return created;
-      });
-    } catch (err) {
-      // Dua kiriman dengan kunci sama tiba bersamaan: yang kalah mengambil hasil yang menang.
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        const winner = await find();
-        if (winner) return winner;
-      }
-      throw err;
-    }
+          return created;
+        }),
+    );
   }
 }

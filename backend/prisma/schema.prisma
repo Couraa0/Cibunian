@@ -1,4 +1,4 @@
-// Skema database RUNA Circular Integration.
+// Skema database RUNA LOOP (Bank Sampah RUNA, Desa Cibunian).
 // Stok TIDAK disimpan sebagai angka total: saldo = SUM(inventory_movements.quantityKg).
 
 generator client {
@@ -21,6 +21,7 @@ enum WasteGroup {
   ANORGANIK
   ORGANIK
   RESIDU
+  // Hasil olahan (maggot, kasgot): stoknya berasal dari catatan panen, bukan dari pengumpulan.
   PRODUK
 }
 
@@ -41,6 +42,8 @@ enum MovementType {
   SALE
   PROCESSING
   ADJUSTMENT
+  // Hasil olahan masuk ke stok produk.
+  PRODUCTION
 }
 
 enum PickupStatus {
@@ -62,6 +65,12 @@ enum BatchStatus {
   CLOSED
 }
 
+// Cara mengolah sampah organik: larva BSF, atau kompos (bagian Sasa).
+enum OrganicMethod {
+  BSF
+  KOMPOS
+}
+
 enum OrganicRecordType {
   FEEDING
   OBSERVATION
@@ -70,26 +79,41 @@ enum OrganicRecordType {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  name         String
-  username     String   @unique
-  passwordHash String
-  role         Role
-  active       Boolean  @default(true)
+  id                String    @id @default(uuid()) @db.Uuid
+  name              String
+  username          String    @unique
+  passwordHash      String
+  role              Role
+  active            Boolean   @default(true)
   // Hanya untuk role MITRA: akun ini mewakili pembeli yang mana.
-  buyerId      String?  @db.Uuid
-  buyer        Buyer?   @relation(fields: [buyerId], references: [id])
-  // Pembatas percobaan login: password salah berturut-turut, dan sampai kapan login dikunci.
-  failedLogins Int      @default(0)
-  lockedUntil  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  buyerId           String?   @db.Uuid
+  buyer             Buyer?    @relation(fields: [buyerId], references: [id])
+  // Tidak dipakai lagi (diganti tabel login_attempts). Dipertahankan agar backend versi lama
+  // yang masih berjalan tidak rusak; hapus lewat migrasi tersendiri setelah semuanya diperbarui.
+  failedLogins      Int       @default(0)
+  lockedUntil       DateTime?
+  // Token yang diterbitkan sebelum waktu ini ditolak: ganti password memutus semua sesi lama.
+  passwordChangedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   collections CollectionTransaction[]
   movements   InventoryMovement[]
   pickups     PickupSchedule[]
+  withdrawals SavingsWithdrawal[]
 
   @@map("users")
+}
+
+// Percobaan login yang gagal, untuk pembatas per username + alamat IP.
+model LoginAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  username  String
+  ip        String
+  createdAt DateTime @default(now())
+
+  @@index([username, createdAt])
+  @@map("login_attempts")
 }
 
 model Household {
@@ -104,8 +128,25 @@ model Household {
   updatedAt DateTime @updatedAt
 
   collections CollectionTransaction[]
+  withdrawals SavingsWithdrawal[]
 
   @@map("households")
+}
+
+// Penarikan tabungan nasabah. Saldo = SUM(collection_transactions.creditAmount) - SUM(amount);
+// seperti stok, saldo tidak disimpan sebagai angka total.
+model SavingsWithdrawal {
+  id           String    @id @default(uuid()) @db.Uuid
+  householdId  String    @db.Uuid
+  household    Household @relation(fields: [householdId], references: [id])
+  amount       Decimal   @db.Decimal(14, 2)
+  note         String?
+  recordedById String    @db.Uuid
+  recordedBy   User      @relation(fields: [recordedById], references: [id])
+  createdAt    DateTime  @default(now())
+
+  @@index([householdId])
+  @@map("savings_withdrawals")
 }
 
 model CollectionPoint {
@@ -123,21 +164,24 @@ model CollectionPoint {
 }
 
 model WasteCategory {
-  id         String     @id @default(uuid()) @db.Uuid
-  name       String     @unique
-  group      WasteGroup @default(ANORGANIK)
+  id                  String     @id @default(uuid()) @db.Uuid
+  name                String     @unique
+  group               WasteGroup @default(ANORGANIK)
   // Katalog marketplace = kategori dengan listed = true.
-  listed     Boolean    @default(false)
-  pricePerKg Decimal?   @db.Decimal(12, 2)
-  active     Boolean    @default(true)
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  listed              Boolean    @default(false)
+  pricePerKg          Decimal?   @db.Decimal(12, 2)
+  // Harga beli dari nasabah: setoran ber-KK menambah tabungannya sebesar berat x harga ini.
+  householdPricePerKg Decimal?   @db.Decimal(12, 2)
+  active              Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
-  collections CollectionTransaction[]
-  movements   InventoryMovement[]
-  requests    MarketplaceRequest[]
-  sales       Sale[]
-  experiments PlasticExperiment[]
+  collections    CollectionTransaction[]
+  movements      InventoryMovement[]
+  requests       MarketplaceRequest[]
+  sales          Sale[]
+  experiments    PlasticExperiment[]
+  organicRecords OrganicRecord[]
 
   @@map("waste_categories")
 }
@@ -157,6 +201,8 @@ model CollectionTransaction {
   recordedAt        DateTime
   // Idempotency key dari perangkat: kirim ulang tidak membuat transaksi ganda.
   clientMutationId  String          @unique
+  // Rupiah yang masuk ke tabungan KK, dibekukan saat disimpan (harga bisa berubah kemudian).
+  creditAmount      Decimal?        @db.Decimal(14, 2)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -197,6 +243,8 @@ model InventoryMovement {
   sale                    Sale?                  @relation(fields: [saleId], references: [id])
   plasticExperimentId     String?                @unique @db.Uuid
   plasticExperiment       PlasticExperiment?     @relation(fields: [plasticExperimentId], references: [id])
+  organicRecordId         String?                @unique @db.Uuid
+  organicRecord           OrganicRecord?         @relation(fields: [organicRecordId], references: [id])
   recordedById            String                 @db.Uuid
   recordedBy              User                   @relation(fields: [recordedById], references: [id])
   createdAt               DateTime               @default(now())
@@ -283,13 +331,14 @@ model Sale {
 }
 
 model OrganicBatch {
-  id        String      @id @default(uuid()) @db.Uuid
-  code      String      @unique
+  id        String        @id @default(uuid()) @db.Uuid
+  code      String        @unique
+  method    OrganicMethod @default(BSF)
   startedAt DateTime
-  status    BatchStatus @default(ACTIVE)
+  status    BatchStatus   @default(ACTIVE)
   notes     String?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   records OrganicRecord[]
 
@@ -298,14 +347,22 @@ model OrganicBatch {
 
 // Satu tabel untuk pakan, observasi, panen larva, dan residu/frass.
 model OrganicRecord {
-  id         String            @id @default(uuid()) @db.Uuid
-  batchId    String            @db.Uuid
-  batch      OrganicBatch      @relation(fields: [batchId], references: [id])
-  type       OrganicRecordType
-  weightKg   Decimal?          @db.Decimal(10, 3)
-  note       String?
-  recordedAt DateTime
-  createdAt  DateTime          @default(now())
+  id               String            @id @default(uuid()) @db.Uuid
+  batchId          String            @db.Uuid
+  batch            OrganicBatch      @relation(fields: [batchId], references: [id])
+  type             OrganicRecordType
+  weightKg         Decimal?          @db.Decimal(10, 3)
+  // Kategori stok terkait (opsional). FEEDING: bahan organik diambil dari stok ini.
+  // HARVEST/FRASS: hasil masuk ke stok produk ini. Kosong = hanya dicatat.
+  wasteCategoryId  String?           @db.Uuid
+  wasteCategory    WasteCategory?    @relation(fields: [wasteCategoryId], references: [id])
+  note             String?
+  recordedAt       DateTime
+  // Idempotency key dari perangkat: kirim ulang dari antrean offline tidak menggandakan.
+  clientMutationId String?           @unique
+  createdAt        DateTime          @default(now())
+
+  movement InventoryMovement?
 
   @@index([batchId, recordedAt])
   @@map("organic_records")

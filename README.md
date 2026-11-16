@@ -1,6 +1,6 @@
-# RUNA Circular Integration (GEN APHYAH)
+# RUNA LOOP (GEN APHYAH)
 
-Aplikasi pengelolaan Bank Sampah RUNA, Desa Cibunian: pencatatan pengumpulan di empat titik, stok material, pengangkutan, Circular Marketplace, pilot Maggot BSF dan paving block, laporan dampak, serta timbangan digital ESP32. Frontend **Vite (React 19 + TypeScript + PWA)**, backend **NestJS + Prisma + PostgreSQL**, dokumentasi API **Swagger**, deploy terpisah ke Vercel.
+Aplikasi pengelolaan Bank Sampah RUNA, Desa Cibunian: pencatatan setoran per KK di empat titik, tabungan nasabah, stok material, pengangkutan, Circular Marketplace, pengolahan organik (kompos dan Maggot BSF), pilot paving block, laporan dampak dan partisipasi, serta timbangan digital ESP32. Acuan kebutuhannya adalah bagian Sasa (RUNA LOOP) di dokumen tim "DSA CIBUNIAN". Frontend **Vite (React 19 + TypeScript + PWA)**, backend **NestJS + Prisma + PostgreSQL**, dokumentasi API **Swagger**, deploy terpisah ke Vercel.
 
 ## ♻️ Menjalankan RUNA di lokal
 
@@ -25,13 +25,44 @@ Lalu jalankan `npm run dev:backend` dan `npm run dev:frontend` dari root, buka `
 
 **Aturan inti:** stok tidak disimpan sebagai angka total, tetapi dihitung dari ledger `inventory_movements`. Pengumpulan dikirim dengan header `Idempotency-Key`, sehingga kirim ulang dari antrean offline tidak membuat transaksi ganda.
 
+**Bisa dipakai tanpa sinyal:** pencatatan pengumpulan, perubahan status pengangkutan, dan catatan batch BSF disimpan di perangkat dulu (IndexedDB), lalu dikirim saat online. Yang ditolak server ditandai untuk ditinjau petugas. Modul lain butuh koneksi.
+
+**Tabungan nasabah (insentif):** setiap kategori bisa diberi *harga beli dari nasabah* di Data Master, terpisah dari harga jual ke pembeli. Setoran yang dicatat atas nama KK menambah tabungannya sebesar berat x harga beli; nilainya dibekukan di transaksi (`collection_transactions.creditAmount`), jadi perubahan harga tidak mengubah setoran lama. Saldo = jumlah setoran dikurangi penarikan (`savings_withdrawals`), dihitung saat dibaca, tidak disimpan sebagai angka total. Penarikan dicatat pengurus atau admin dan ditolak bila melebihi saldo. Setoran dari antrean offline memakai harga saat tersinkron. Laporan menampilkan partisipasi nasabah: berapa KK aktif yang setor pada periode itu, beserta rinciannya per KK.
+
+**Pengolahan organik:** batch bermetode kompos atau Maggot BSF. Bahan bisa diambil dari stok organik (stok berkurang); hasil panen bisa dimasukkan ke stok produk (kategori "Kompos", "Maggot BSF", "Kasgot"). Batch kompos tidak punya catatan residu/kasgot.
+
+**Produk olahan:** kategori berkelompok `PRODUK` (bawaan seed: Maggot BSF dan Kasgot) punya stok seperti material lain. Catatan panen atau residu/frass yang memilih kategori produk menambah stoknya. Pakan BSF bisa berasal dari stok organik RUNA (beratnya dikurangkan dari stok) atau dari mitra seperti restoran dan hotel (tidak lewat stok; nama mitra ditulis di catatan); laporan memisahkan keduanya. Produk yang ditandai "tampil di katalog" bisa diminta dan dijual lewat Marketplace. Prototipe paving block sengaja tidak masuk katalog.
+
+**Laporan:** ringkasan per periode dengan pembanding periode sebelumnya, tren enam bulan (`GET /api/reports/analytics`), cetak/PDF, dan unduh CSV pengumpulan serta penjualan. CSV memakai format Indonesia (pemisah titik koma, desimal koma) dan paling banyak 5000 baris sekali unduh.
+
 **Tes:** `npm run test:e2e:backend` memakai `TEST_DATABASE_URL` (database terpisah yang isinya dihapus tiap run; `npm run db:test` di folder backend). `npm run test:e2e:frontend` memakai Playwright.
 
 **Deploy backend ke Vercel** butuh environment variable tambahan: `DATABASE_URL` (PostgreSQL ter-host), `JWT_SECRET`, `IOT_DEVICE_KEY`, dan `CORS_ORIGIN` (URL frontend). Jalankan `npm run db:migrate` terhadap database produksi sebelum dipakai.
 
 **Supabase sebagai database:** isi `DATABASE_URL` dengan Transaction pooler (port 6543) dan `DIRECT_URL` dengan Session pooler (port 5432); contohnya ada di `backend/.env.example`. Backend memakai login sendiri (JWT), jadi Supabase Auth dan `supabase-js` tidak dipakai. Data API Supabase ditutup lewat migrasi: semua tabel diberi RLS tanpa policy, dan izin peran `anon`, `authenticated`, serta `service_role` dicabut (termasuk untuk tabel yang dibuat nanti).
 
-**Pembatas login:** lima kali password salah berturut-turut mengunci login akun itu selama 15 menit (`MAX_FAILED_LOGINS` dan `LOCK_MINUTES` di `backend/src/auth/auth.controller.ts`). Hitungannya disimpan di tabel `users`, jadi tetap berlaku di Vercel serverless.
+**Login dan akun:** percobaan login yang gagal dihitung per username dan alamat IP di tabel `login_attempts`, jadi tetap berlaku di Vercel serverless. Lima kali salah dari satu alamat dalam 15 menit mengunci alamat itu untuk username tersebut; 20 kali dari semua alamat mengunci username itu (konstanta di `backend/src/auth/auth.controller.ts`). Setiap pengguna bisa mengganti password sendiri di halaman Akun; itu, dan reset password oleh admin, memutus semua sesi lama akun tersebut. Masa berlaku sesi diatur lewat `JWT_EXPIRES_IN` (bawaan `7d`).
+
+**Urutan saat merilis:** migrasi di repo ini hanya menambah (kolom lama `users.failedLogins` dan `users.lockedUntil` belum dihapus), jadi aman dijalankan sebelum backend baru di-deploy. Backend versi lama tidak mengenal kelompok `PRODUK`, jadi deploy backend terbaru sebelum produk olahan mulai dicatat.
+
+**Tampilan di berbagai perangkat:** tata letak diperiksa dari ponsel 320 px sampai monitor 1920 px, tegak dan rebah. Di bawah 992 px navigasi memakai tab bawah; di atasnya rel samping. Tabel yang tidak muat di wadahnya otomatis ditumpuk menjadi kartu (lihat `useStackWhenNarrow` di `frontend/src/components/Resource.tsx`), jadi tidak ada tabel yang perlu digeser ke samping.
+
+### Keputusan dan catatan tim (16 November 2026)
+
+Sudah diputuskan:
+
+- Acuan sistem RUNA adalah bagian Sasa (RUNA LOOP) di dokumen "DSA CIBUNIAN". Hal yang berkaitan dengan Desa Cinanjung tidak dimasukkan ke sistem ini.
+- Insentif nasabah berupa tabungan rupiah per KK dari setoran.
+- Sesi login berlaku 7 hari.
+- Pakan BSF boleh dari stok organik RUNA atau dari mitra (restoran, hotel).
+- Ekspor laporan cukup CSV.
+- Batas percobaan login: 5 kali per alamat dan 20 kali per username dalam 15 menit.
+
+Belum dikerjakan, menunggu keputusan atau waktu:
+
+- **Backup database:** paket gratis Supabase tidak punya backup. Rencananya naik paket setelah dana program cair; sampai saat itu, unduh CSV laporan secara berkala sebagai cadangan sederhana.
+- **Akun uji per role** dan data pembeli contoh di database: dihapus atau dinonaktifkan setelah uji coba selesai.
+- **Kolom lama** `users.failedLogins` dan `users.lockedUntil`: dihapus lewat migrasi tersendiri setelah backend terbaru ter-deploy.
 
 ---
 

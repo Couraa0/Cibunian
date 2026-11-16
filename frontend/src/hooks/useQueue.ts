@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { queue, QUEUE_EVENT } from '../services/offline'
 import type { QueueItem } from '../services/offline'
 
@@ -14,4 +14,16 @@ export function useQueue(): QueueItem[] {
   }, [])
 
   return items
+}
+
+/**
+ * Panggil `callback` setiap kali jumlah antrean berkurang, yaitu saat ada yang baru tersinkron:
+ * waktunya memuat ulang data dari server. `callback` harus stabil (mis. `reload` dari useApi).
+ */
+export function useOnSynced(pending: number, callback: () => void) {
+  const previous = useRef(pending)
+  useEffect(() => {
+    if (pending < previous.current) callback()
+    previous.current = pending
+  }, [pending, callback])
 }

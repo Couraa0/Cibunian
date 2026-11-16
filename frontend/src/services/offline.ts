@@ -4,11 +4,22 @@
 export interface QueueItem {
   /** UUID buatan klien; dikirim sebagai Idempotency-Key agar kirim ulang tidak menggandakan. */
   id: string
+  /** Bawaan POST (catatan baru). PATCH untuk perubahan, mis. status pengangkutan. */
+  method?: 'POST' | 'PATCH'
   path: string
   body: Record<string, unknown>
+  /** Ringkasan satu baris untuk daftar "belum tersinkron". */
+  label?: string
   createdAt: number
   /** Terisi bila server menolak transaksi (validasi/konflik) dan perlu ditinjau petugas. */
   error?: string
+}
+
+/** Halaman tempat sebuah item antrean bisa ditinjau. */
+export function queuePage(item: QueueItem): string {
+  if (item.path.startsWith('/pickups')) return '/pengangkutan'
+  if (item.path.startsWith('/organic')) return '/organik'
+  return '/pengumpulan'
 }
 
 let dbPromise: Promise<IDBDatabase> | undefined
@@ -57,8 +68,8 @@ export const queue = {
     return items.sort((a, b) => a.createdAt - b.createdAt)
   },
   /** Tambah transaksi baru; id acaknya menjadi Idempotency-Key saat dikirim. */
-  add(path: string, body: Record<string, unknown>) {
-    return this.put({ id: crypto.randomUUID(), path, body, createdAt: Date.now() })
+  add(path: string, body: Record<string, unknown>, extra: Pick<QueueItem, 'method' | 'label'> = {}) {
+    return this.put({ id: crypto.randomUUID(), path, body, createdAt: Date.now(), ...extra })
   },
   async put(item: QueueItem) {
     await run('queue', 'readwrite', (s) => s.put(item))

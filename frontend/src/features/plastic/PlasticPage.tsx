@@ -1,8 +1,10 @@
 import { Resource } from '../../components/Resource'
+import { BrickWall } from 'lucide-react'
 import type { Field } from '../../components/Resource'
-import { useOptions } from '../../hooks/useApi'
-import type { PlasticExperiment } from '../../types'
+import { useApi } from '../../hooks/useApi'
+import type { Category, PlasticExperiment } from '../../types'
 import { dateTime, kg } from '../../utils/format'
+import { PageHeader } from '../../components/ui'
 
 const detailFields: Field[] = [
   { name: 'prototypeCount', label: 'Jumlah prototipe', type: 'number', step: '1', min: '0' },
@@ -14,11 +16,18 @@ const detailFields: Field[] = [
 ]
 
 export function PlasticPage() {
-  const categories = useOptions('/categories')
+  // Bahan paving block adalah plastik dari stok anorganik, bukan organik atau produk olahan.
+  const categories = (useApi<Category[]>('/categories').data ?? [])
+    .filter((c) => c.active !== false && c.group === 'ANORGANIK')
+    .map((c) => ({ value: c.id, label: c.name }))
 
   return (
     <>
-      <h1 className="mb-3">Pilot Paving Block Plastik</h1>
+      <PageHeader
+        icon={BrickWall}
+        title="Pilot Paving Block"
+        lead="Eksperimen mengolah plastik terpilah menjadi paving block, dari komposisi sampai hasil uji."
+      />
       <div className="alert alert-warning" role="note">
         Prototipe belum boleh dianggap layak dipakai atau dipasarkan sebelum lolos pengujian teknis
         dan keselamatan.
