@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { Boxes } from 'lucide-react'
 import { Card, Resource, StaleNote } from '../../components/Resource'
 import { useApi, useOptions } from '../../hooks/useApi'
 import type { Category, Movement, User } from '../../types'
 import { dateTime, kg, label, rupiah } from '../../utils/format'
+import { PageHeader } from '../../components/ui'
 
 export function InventoryPage({ user }: { user: User }) {
   const canManage = user.role !== 'PETUGAS'
@@ -13,7 +15,24 @@ export function InventoryPage({ user }: { user: User }) {
 
   return (
     <>
-      <h1 className="mb-3">Stok Material</h1>
+      <PageHeader
+        icon={Boxes}
+        title="Stok Material"
+        lead="Dihitung dari semua pergerakan stok: pengumpulan, penjualan, pengolahan, dan penyesuaian."
+        stats={
+          stock.data && [
+            {
+              label: 'Material di gudang',
+              value: kg(stock.data.filter((c) => c.group !== 'PRODUK').reduce((t, c) => t + Number(c.stockKg ?? 0), 0)),
+            },
+            {
+              label: 'Produk olahan',
+              value: kg(stock.data.filter((c) => c.group === 'PRODUK').reduce((t, c) => t + Number(c.stockKg ?? 0), 0)),
+            },
+            { label: 'Jenis material', value: stock.data.length },
+          ]
+        }
+      />
 
       <Card title="Stok saat ini">
         <StaleNote at={stock.cachedAt} error={stock.error} />
@@ -36,8 +55,8 @@ export function InventoryPage({ user }: { user: User }) {
           ))}
         </ul>
         <p className="form-text mb-0 mt-3">
-          Stok dihitung dari riwayat pergerakan di bawah: masuk dari pengumpulan, keluar karena
-          penjualan, pengolahan, atau penyesuaian.
+          Stok dihitung dari riwayat pergerakan di bawah: masuk dari pengumpulan atau hasil olahan,
+          keluar karena penjualan, pengolahan, atau penyesuaian.
         </p>
       </Card>
 

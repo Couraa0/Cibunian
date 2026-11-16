@@ -1,4 +1,5 @@
-import { IsDateString, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDateString, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class DateRangeDto {
   @IsOptional()
@@ -8,6 +9,17 @@ export class DateRangeDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+}
+
+/** Query daftar: rentang tanggal + jumlah baris terbaru. */
+export class ListQueryDto extends DateRangeDto {
+  /** Bawaan 200 baris terbaru. Ekspor laporan meminta sampai 5000. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5000)
+  limit?: number;
 }
 
 /** Filter Prisma untuk kolom tanggal, atau undefined bila tanpa rentang. */

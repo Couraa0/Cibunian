@@ -42,6 +42,12 @@ class CategoryDto {
   @Min(0)
   pricePerKg?: number;
 
+  /** Harga beli dari nasabah per kg: setoran ber-KK menambah tabungannya. */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  householdPricePerKg?: number;
+
   @IsOptional()
   @IsBoolean()
   active?: boolean;

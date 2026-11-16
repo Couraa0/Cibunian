@@ -1,6 +1,7 @@
 // Form, tabel, dan gabungan keduanya (Resource) yang dipakai hampir semua halaman modul.
-import { useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { useApi } from '../hooks/useApi'
 import { api } from '../services/api'
 import { dateTime, toLocalInput } from '../utils/format'
@@ -10,16 +11,22 @@ export interface Field {
   label: string
   type?: 'text' | 'number' | 'datetime-local' | 'select' | 'textarea' | 'checkbox' | 'password'
   options?: { value: string; label: string }[]
+  /** Teks pilihan kosong pada select yang tidak wajib. Default "(tidak ada)". */
+  emptyLabel?: string
   required?: boolean
+  /** Tampil hanya bila fungsi ini benar untuk isian saat ini; kolom tersembunyi tidak dikirim. */
+  visible?: (values: Values) => boolean
   /** Untuk type number. Default 0.001 (gram). */
   step?: string
   min?: string
   help?: string
   /** Nilai awal form baru. datetime-local tanpa default = waktu sekarang. */
   default?: string | boolean
+  /** Petunjuk isi otomatis browser. Default: password = "new-password", lainnya "off". */
+  autoComplete?: string
 }
 
-type Values = Record<string, string | boolean>
+export type Values = Record<string, string | boolean>
 
 function initialValues(fields: Field[], initial?: Record<string, unknown>): Values {
   const values: Values = {}
@@ -36,6 +43,7 @@ function initialValues(fields: Field[], initial?: Record<string, unknown>): Valu
 function toPayload(fields: Field[], values: Values) {
   const payload: Record<string, unknown> = {}
   for (const f of fields) {
+    if (f.visible && !f.visible(values)) continue
     const value = values[f.name]
     if (f.type === 'checkbox') payload[f.name] = Boolean(value)
     else if (value === '') continue // kolom opsional yang kosong tidak dikirim
@@ -76,13 +84,14 @@ export function Form({ fields, initial, submitLabel = 'Simpan', onSubmit, onCanc
   }
 
   return (
-    <form className="row g-2 align-items-end" onSubmit={submit}>
+    <form className="row g-2 align-items-start" onSubmit={submit}>
       {fields.map((f) => {
+        if (f.visible && !f.visible(values)) return null
         const id = `${formId}-${f.name}`
         const value = values[f.name]
         if (f.type === 'checkbox') {
           return (
-            <div className="col-12 col-md-6 col-lg-4" key={f.name}>
+            <div className="col-12 col-md-6 col-lg-4 form-cek" key={f.name}>
               <div className="form-check">
                 <input
                   id={id}
@@ -112,7 +121,7 @@ export function Form({ fields, initial, submitLabel = 'Simpan', onSubmit, onCanc
             </label>
             {f.type === 'select' ? (
               <select className="form-select" {...common}>
-                <option value="">{f.required ? 'Pilih…' : '(tidak ada)'}</option>
+                <option value="">{f.required ? 'Pilih…' : (f.emptyLabel ?? '(tidak ada)')}</option>
                 {f.options?.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
@@ -128,7 +137,7 @@ export function Form({ fields, initial, submitLabel = 'Simpan', onSubmit, onCanc
                 inputMode={f.type === 'number' ? 'decimal' : undefined}
                 step={f.type === 'number' ? (f.step ?? '0.001') : undefined}
                 min={f.min}
-                autoComplete={f.type === 'password' ? 'new-password' : 'off'}
+                autoComplete={f.autoComplete ?? (f.type === 'password' ? 'new-password' : 'off')}
                 {...common}
               />
             )}
@@ -163,6 +172,37 @@ export interface Column<T> {
   align?: 'end'
 }
 
+/** Baris yang langsung tampil; sisanya dibuka dengan satu ketukan agar halaman tidak memanjang. */
+const PREVIEW_ROWS = 10
+
+/**
+ * Tabel yang tidak muat di wadahnya ditumpuk menjadi kartu "label: nilai" supaya tidak perlu
+ * digeser ke samping. Ukurannya lebar WADAH, bukan layar: tabel delapan kolom di tablet rebah
+ * (wadah menyempit karena rel samping) sama sesaknya dengan di ponsel.
+ * Hasilnya ditulis ke atribut data-tumpuk yang dibaca CSS: "satu" kolom, atau "dua" kolom bila
+ * wadah cukup lebar. Ditulis langsung ke elemen sebelum layar digambar, jadi tidak berkedip.
+ */
+function useStackWhenNarrow(columnCount: number) {
+  // Callback ref: dipanggil saat wadah terpasang (sebelum layar digambar) dan dibersihkan saat dilepas.
+  return useCallback(
+    (wrapper: HTMLDivElement | null) => {
+      if (!wrapper) return
+      // Lebar rata-rata per kolom agar isi masih nyaman dibaca; tabel kecil berisi angka boleh lebih rapat.
+      const needed = columnCount * (columnCount > 3 ? 105 : 88)
+      const apply = () => {
+        const width = wrapper.clientWidth
+        if (width >= needed) wrapper.removeAttribute('data-tumpuk')
+        else wrapper.setAttribute('data-tumpuk', width >= 520 ? 'dua' : 'satu')
+      }
+      apply()
+      const observer = new ResizeObserver(apply)
+      observer.observe(wrapper)
+      return () => observer.disconnect()
+    },
+    [columnCount],
+  )
+}
+
 export function Table<T extends { id: string }>({
   columns,
   rows,
@@ -172,11 +212,14 @@ export function Table<T extends { id: string }>({
   rows: T[] | undefined
   empty?: string
 }) {
+  const [showAll, setShowAll] = useState(false)
+  const wrapperRef = useStackWhenNarrow(columns.length)
   if (!rows) return <p className="text-secondary mb-0">Memuat…</p>
-  if (!rows.length) return <p className="text-secondary mb-0">{empty}</p>
+  if (!rows.length) return <Empty text={empty} />
+  const shown = showAll ? rows : rows.slice(0, PREVIEW_ROWS)
   return (
-    <div className="table-responsive">
-      <table className="table align-middle mb-0 table-stack">
+    <div className="table-responsive" ref={wrapperRef}>
+      <table className="table align-middle mb-0">
         <thead>
           <tr>
             {columns.map((c) => (
@@ -187,18 +230,28 @@ export function Table<T extends { id: string }>({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {shown.map((row) => (
             <tr key={row.id}>
-              {columns.map((c) => (
-                // data-label dipakai CSS untuk menampilkan nama kolom saat baris ditumpuk di ponsel
-                <td key={c.label} data-label={c.label} className={c.align === 'end' ? 'text-end' : undefined}>
-                  {c.render(row)}
-                </td>
-              ))}
+              {columns.map((c) => {
+                const content = c.render(row)
+                const blank = content == null || content === false || content === ''
+                return (
+                  // data-label dipakai CSS untuk menampilkan nama kolom saat baris ditumpuk.
+                  // Isi dibungkus satu elemen supaya tetap utuh di sisi kanan label.
+                  <td key={c.label} data-label={c.label} className={c.align === 'end' ? 'text-end' : undefined}>
+                    {!blank && <span>{content}</span>}
+                  </td>
+                )
+              })}
             </tr>
           ))}
         </tbody>
       </table>
+      {rows.length > shown.length && (
+        <button className="btn btn-sm btn-outline-secondary w-100 mt-2 no-print" onClick={() => setShowAll(true)}>
+          Tampilkan semua ({rows.length})
+        </button>
+      )}
     </div>
   )
 }
@@ -219,16 +272,38 @@ export function StaleNote({ at, error }: { at?: number | null; error?: string })
   ) : null
 }
 
-export function Card({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
+export function Card({
+  title,
+  icon: Icon,
+  actions,
+  children,
+}: {
+  title: string
+  icon?: LucideIcon
+  actions?: ReactNode
+  children: ReactNode
+}) {
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2>{title}</h2>
+        <h2>
+          {Icon && (
+            <span className="panel-ikon" aria-hidden="true">
+              <Icon size={17} />
+            </span>
+          )}
+          {title}
+        </h2>
         {actions}
       </div>
       {children}
     </section>
   )
+}
+
+/** Keadaan kosong: satu kalimat yang mengarahkan ke langkah berikutnya. */
+export function Empty({ text }: { text: ReactNode }) {
+  return <p className="kosong">{text}</p>
 }
 
 interface ResourceProps<T> {
@@ -242,6 +317,8 @@ interface ResourceProps<T> {
   editFields?: Field[]
   /** Path POST bila berbeda dari path daftar. */
   createPath?: string
+  /** Pengganti PATCH langsung, mis. untuk menyimpan perubahan lewat antrean offline. */
+  onEdit?: (row: T, payload: Record<string, unknown>) => Promise<unknown>
   addLabel?: string
   empty?: string
   /** Dipanggil setelah data berubah, untuk memuat ulang bagian lain halaman. */
@@ -257,6 +334,7 @@ export function Resource<T extends { id: string }>({
   fields,
   editFields,
   createPath = path,
+  onEdit,
   addLabel = 'Tambah',
   empty,
   onChange,
@@ -265,6 +343,14 @@ export function Resource<T extends { id: string }>({
   const { data, error, cachedAt, reload } = useApi<T[]>(path, refreshKey)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<T | null>(null)
+
+  // Form muncul di atas daftar: di ponsel bisa berada di luar layar dari baris yang diketuk.
+  const formRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!adding && !editing) return
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    formRef.current?.scrollIntoView({ block: 'nearest', behavior: calm ? 'auto' : 'smooth' })
+  }, [adding, editing])
 
   const done = () => {
     setAdding(false)
@@ -303,7 +389,7 @@ export function Resource<T extends { id: string }>({
     >
       <StaleNote at={cachedAt} error={error} />
       {adding && fields && (
-        <div className="form-box">
+        <div className="form-box" ref={editing ? undefined : formRef}>
           <Form
             fields={fields}
             onSubmit={(payload) => api.post(createPath, payload).then(done)}
@@ -312,13 +398,19 @@ export function Resource<T extends { id: string }>({
         </div>
       )}
       {editing && editFields && (
-        <div className="form-box">
+        <div className="form-box" ref={formRef}>
+          <p className="small fw-semibold mb-2">
+            Mengubah {columns[0].render(editing)}
+            {columns[1] && <> ({columns[1].render(editing)})</>}
+          </p>
           <Form
             key={editing.id}
             fields={editFields}
             initial={editing as Record<string, unknown>}
             submitLabel="Simpan perubahan"
-            onSubmit={(payload) => api.patch(`${path}/${editing.id}`, payload).then(done)}
+            onSubmit={(payload) =>
+              (onEdit ? onEdit(editing, payload) : api.patch(`${path}/${editing.id}`, payload)).then(done)
+            }
             onCancel={() => setEditing(null)}
           />
         </div>

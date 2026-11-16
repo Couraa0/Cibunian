@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { Store } from 'lucide-react'
 import { Card, Form, Resource, StaleNote, Table } from '../../components/Resource'
 import type { Field } from '../../components/Resource'
 import { useApi, useOptions } from '../../hooks/useApi'
 import { api } from '../../services/api'
 import type { Buyer, Category, MarketRequest, Sale, User } from '../../types'
 import { dateTime, kg, label, rupiah } from '../../utils/format'
+import { PageHeader } from '../../components/ui'
 
 const saleFields: Field[] = [
   { name: 'weightKg', label: 'Berat diserahkan (kg)', type: 'number', required: true, min: '0.001' },
@@ -32,15 +34,28 @@ export function MarketplacePage({ user }: { user: User }) {
 
   return (
     <>
-      <h1 className="mb-3">Circular Marketplace</h1>
+      <PageHeader
+        icon={Store}
+        title="Circular Marketplace"
+        lead="Material terpilah dan produk olahan RUNA yang bisa diminta mitra pembeli."
+      />
 
-      <Card title="Katalog material">
+      <Card title="Katalog material dan produk olahan">
         <StaleNote at={listings.cachedAt} error={listings.error} />
         <Table
           rows={listings.data}
           empty="Belum ada material di katalog. Tandai kategori sebagai “tampil di katalog” di Data Master."
           columns={[
-            { label: 'Material', render: (c) => c.name },
+            {
+              label: 'Material',
+              render: (c) => (
+                <>
+                  <i className={`dot ${c.group}`} />
+                  {c.name}
+                  {c.group === 'PRODUK' && <small className="text-secondary"> {label(c.group).toLowerCase()}</small>}
+                </>
+              ),
+            },
             { label: 'Stok tersedia', align: 'end', render: (c) => kg(c.stockKg) },
             { label: 'Harga/kg', align: 'end', render: (c) => rupiah(c.pricePerKg) },
           ]}

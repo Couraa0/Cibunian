@@ -51,9 +51,9 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Silakan login terlebih dahulu');
     }
 
-    let userId: string;
+    let claims: { sub: string; iat: number };
     try {
-      userId = (await this.jwt.verifyAsync<{ sub: string }>(token)).sub;
+      claims = await this.jwt.verifyAsync<{ sub: string; iat: number }>(token);
     } catch {
       throw new UnauthorizedException('Sesi tidak valid atau kedaluwarsa');
     }
@@ -61,7 +61,7 @@ export class AuthGuard implements CanActivate {
     // Dibaca dari database tiap request agar akun yang dinonaktifkan atau
     // diganti role-nya langsung berlaku, tanpa menunggu token kedaluwarsa.
     const user = await this.prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: claims.sub },
       select: {
         id: true,
         name: true,
@@ -69,10 +69,20 @@ export class AuthGuard implements CanActivate {
         role: true,
         buyerId: true,
         active: true,
+        passwordChangedAt: true,
       },
     });
     if (!user?.active) {
       throw new UnauthorizedException('Akun tidak aktif');
+    }
+    // Token yang terbit sebelum password diganti tidak berlaku lagi (mis. perangkat hilang).
+    if (
+      user.passwordChangedAt &&
+      claims.iat * 1000 < user.passwordChangedAt.getTime()
+    ) {
+      throw new UnauthorizedException(
+        'Password akun ini sudah diganti. Silakan masuk lagi.',
+      );
     }
 
     const allowed =

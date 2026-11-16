@@ -95,9 +95,12 @@ export const api = {
       return { data: hit.data as T, cachedAt: hit.at }
     }
   },
+  /** GET langsung ke server, tanpa cache: untuk data sekali pakai seperti ekspor laporan. */
+  fresh: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body: unknown, headers?: Record<string, string>) =>
     request<T>('POST', path, body, headers),
-  patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
+  patch: <T>(path: string, body: unknown, headers?: Record<string, string>) =>
+    request<T>('PATCH', path, body, headers),
 
   async login(username: string, password: string) {
     const res = await request<{ accessToken: string; user: User }>('POST', '/auth/login', {
@@ -106,6 +109,16 @@ export const api = {
     })
     session.set(res.accessToken, res.user)
     return res.user
+  },
+
+  /** Ganti password sendiri. Sesi lama di semua perangkat putus; perangkat ini memakai token baru. */
+  async changePassword(currentPassword: string, newPassword: string) {
+    const user = session.user
+    const res = await request<{ accessToken: string }>('POST', '/auth/password', {
+      currentPassword,
+      newPassword,
+    })
+    if (user) session.set(res.accessToken, user)
   },
 }
 
@@ -121,7 +134,8 @@ export function syncQueue(): Promise<void> {
     for (const item of await queue.all()) {
       if (item.error) continue // sudah ditolak server: menunggu ditinjau petugas
       try {
-        await api.post(item.path, item.body, { 'Idempotency-Key': item.id })
+        const send = item.method === 'PATCH' ? api.patch : api.post
+        await send(item.path, item.body, { 'Idempotency-Key': item.id })
         await queue.remove(item.id)
       } catch (err) {
         // 4xx (selain sesi habis / terlalu sering) = ditolak permanen: tandai gagal.

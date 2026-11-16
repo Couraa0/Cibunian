@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'pwa-192x192.svg', 'pwa-512x512.svg'],
       manifest: {
-        name: 'RUNA Circular Integration',
+        name: 'RUNA LOOP',
         short_name: 'RUNA',
-        description: 'Pengelolaan Bank Sampah RUNA: pengumpulan, stok, pengangkutan, dan marketplace.',
+        description: 'Pengelolaan Bank Sampah RUNA: setoran per KK, tabungan nasabah, stok, kompos, dan penjualan.',
         lang: 'id',
         theme_color: '#0a3f26',
         background_color: '#f1f5ef',

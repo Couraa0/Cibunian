@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { StatusBadge } from '../../components/common/StatusBadge'
+import { BrandMark } from '../../components/ui'
 import { api } from '../../services/api'
 import type { User } from '../../types'
 
@@ -29,10 +30,34 @@ export function LoginPage({ onLogin, isOnline }: { onLogin: (user: User) => void
 
   return (
     <div className="login">
+      <section className="login-cerita">
+        <div className="login-merek">
+          <BrandMark size={64} />
+          <div>
+            <h1 className="title">
+              RUNA
+              <br />
+              LOOP
+            </h1>
+            <p>Bank Sampah RUNA, Desa Cibunian</p>
+          </div>
+        </div>
+        <p className="login-lead">
+          Timbang dan catat setoran tiap KK, kumpulkan tabungan nasabah, pantau stok, dan olah
+          sampah organik menjadi kompos, juga saat sinyal hilang.
+        </p>
+
+        {/* Perbukitan Cibunian: tiga lapis bukit, yang terdepan menyatu dengan latar halaman. */}
+        <svg className="bukit" viewBox="0 0 1440 320" preserveAspectRatio="none" aria-hidden="true">
+          <path fill="#14603a" d="M0 150C220 70 430 95 660 150S1130 60 1440 130V320H0Z" />
+          <path fill="#2f8a4c" d="M0 215C210 150 400 175 620 215S1090 130 1440 195V320H0Z" />
+          <path fill="var(--kabut)" d="M0 275C260 225 520 250 770 272S1210 215 1440 255V320H0Z" />
+        </svg>
+      </section>
+
       <form onSubmit={submit}>
-        <h1 className="title">RUNA</h1>
-        <p className="fw-semibold mb-1">Circular Integration</p>
-        <p className="text-secondary">Bank Sampah RUNA, Desa Cibunian</p>
+        <h2>Masuk</h2>
+        <p className="text-secondary">Pakai akun RUNA Anda.</p>
 
         <label className="form-label fw-semibold" htmlFor="username">
           Username
@@ -68,13 +93,6 @@ export function LoginPage({ onLogin, isOnline }: { onLogin: (user: User) => void
         </button>
         <StatusBadge isOnline={isOnline} />
       </form>
-
-      {/* Perbukitan Cibunian: tiga lapis bukit, makin dekat makin gelap. */}
-      <svg className="bukit" viewBox="0 0 1440 320" preserveAspectRatio="none" aria-hidden="true">
-        <path fill="#d3e7d5" d="M0 150C220 70 430 95 660 150S1130 60 1440 130V320H0Z" />
-        <path fill="#86c08d" d="M0 215C210 150 400 175 620 215S1090 130 1440 195V320H0Z" />
-        <path fill="#0e5a36" d="M0 275C260 225 520 250 770 272S1210 215 1440 255V320H0Z" />
-      </svg>
     </div>
   )
 }

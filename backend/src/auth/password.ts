@@ -13,6 +13,14 @@ export async function hashPassword(password: string): Promise<string> {
   return `${salt.toString('hex')}:${key.toString('hex')}`;
 }
 
+/**
+ * Nilai untuk kolom users.passwordChangedAt saat password diganti: token yang terbit sebelum
+ * waktu ini ditolak AuthGuard. Dibulatkan ke detik karena klaim `iat` JWT berpresisi detik;
+ * tanpa pembulatan, token baru yang terbit pada detik yang sama ikut tertolak.
+ */
+export const passwordChangedNow = () =>
+  new Date(Math.floor(Date.now() / 1000) * 1000);
+
 export async function verifyPassword(
   password: string,
   stored: string,

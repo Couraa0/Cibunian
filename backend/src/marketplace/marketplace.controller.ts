@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
@@ -24,6 +25,7 @@ import {
 } from 'class-validator';
 import { CurrentUser, MANAGERS, Roles, STAFF } from '../auth/auth.guard.js';
 import type { AuthUser } from '../auth/auth.guard.js';
+import { dateRange, ListQueryDto } from '../common/date-range.dto.js';
 import { RequestStatus, Role } from '../generated/prisma/client.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 import { PrismaService } from '../prisma.service.js';
@@ -105,16 +107,17 @@ export class MarketplaceController {
     private readonly marketplace: MarketplaceService,
   ) {}
 
-  /** Katalog: kategori yang ditawarkan beserta stok tersedia. */
+  /** Katalog: material dan produk olahan yang ditawarkan beserta stok tersedia. */
   @Roles(...WITH_MITRA)
   @Get('marketplace/listings')
   async listings() {
     const stock = await this.inventory.stock();
     return stock
       .filter((c) => c.listed)
-      .map(({ id, name, pricePerKg, stockKg }) => ({
+      .map(({ id, name, group, pricePerKg, stockKg }) => ({
         id,
         name,
+        group,
         pricePerKg,
         stockKg,
       }));
@@ -177,10 +180,11 @@ export class MarketplaceController {
 
   @Roles(...MANAGERS)
   @Get('sales')
-  sales() {
+  sales(@Query() query: ListQueryDto) {
     return this.prisma.sale.findMany({
+      where: { soldAt: dateRange(query) },
       orderBy: { soldAt: 'desc' },
-      take: 200,
+      take: query.limit ?? 200,
       include: {
         buyer: { select: { name: true } },
         wasteCategory: { select: { name: true } },
